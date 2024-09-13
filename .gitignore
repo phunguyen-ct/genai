@@ -1,0 +1,6 @@
+bds_db
+docstore.json
+
+flagged
+.DS_Store
+__pycache__
