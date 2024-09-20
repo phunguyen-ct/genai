@@ -5,6 +5,8 @@ llama-index-llms-huggingface
 llama-index-embeddings-huggingface
 llama_index.llms.huggingface_api
 llama-index-llms-openai
+llama-index-llms-gemini
+llama-index-embeddings-gemini
 llama_index.retrievers.bm25
 bs4
 markdownify 

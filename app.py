@@ -1,20 +1,19 @@
 from utils import (
     from_storages,
-    get_summary_tool,
-    get_vector_tool,
-    get_comparision_tool,
-    get_negotiation_tool,
+    # get_vector_tool
+    # get_comparision_tool
+    # get_negotiation_tool
     router_query_engine
 )
 import os
 import gradio as gr
 
+from llama_index.llms.gemini import Gemini
+from llama_index.embeddings.gemini import GeminiEmbedding
+
 from llama_index.llms.openai import OpenAI
-from llama_index.embeddings.huggingface import HuggingFaceEmbedding
-from llama_index.llms.huggingface_api import HuggingFaceInferenceAPI
 from llama_index.core import (
     Settings,
-    PromptTemplate,
 )
 from llama_index.core.agent import ReActAgent
 
@@ -25,34 +24,18 @@ from tenacity import (
     wait_random_exponential,
 )
 
+
 # Make sure to: export OPENAI_API_KEY=<Your OpenAI key>
 os.environ['OPENAI_API_KEY'] = os.getenv('OPENAI_API_KEY')
+gemini_api_key = os.getenv('GOOGLE_API_KEY')
 
-# Make sure to: export HF_TOKEN=<Your HuggingFaceAPI key>
-hf_token = os.getenv("HF_TOKEN")
+Settings.llm = Gemini(api_key=gemini_api_key, model="models/gemini-1.5-flash")
+Settings.embed_model = GeminiEmbedding(
+    api_key=gemini_api_key, model="models/embedding-001")
 
-hf_llm = HuggingFaceInferenceAPI(
-    model_name="mistralai/Mistral-7B-Instruct-v0.2",
-    tokenizer_name="mistralai/Mistral-7B-Instruct-v0.2",
-    query_wrapper_prompt=PromptTemplate(
-        "<s>[INST]"
-        " Always answer the query using the provided context information, "
-        " and not prior knowledge to answer the question: {query_str}\n"
-        " Response in Vietnamese.\n"
-        "[/INST] </s>\n"
-    ),
-    token=hf_token,
-    generate_kwargs={"temperature": 0.2, "top_k": 5, "top_p": 0.95},
-)
-hf_embed_model = HuggingFaceEmbedding(
-    model_name="BAAI/bge-small-en-v1.5")
+vector_index, summary_index = from_storages()
 
-Settings.llm = hf_llm
-Settings.embed_model = hf_embed_model
-
-# vector_index, summary_index = from_storages()
 # vector_tool = get_vector_tool(vector_index=vector_index)
-# summary_tool = get_summary_tool(summary_index=summary_index)
 # comparison_tool = get_comparision_tool(vector_index=vector_index)
 # negotiate_tool = get_negotiation_tool(vector_index=vector_index)
 
@@ -60,7 +43,6 @@ Settings.embed_model = hf_embed_model
 # agent = ReActAgent.from_tools(
 #     tools=[
 #         vector_tool,
-#         summary_tool,
 #         comparison_tool,
 #         negotiate_tool,
 #     ],
@@ -69,7 +51,7 @@ Settings.embed_model = hf_embed_model
 #     context='This agent assists users with finding apartments, comparing options, and negotiating offers.'
 # )
 
-query_engine = router_query_engine()
+query_engine = router_query_engine(vector_index, summary_index)
 
 
 @retry(wait=wait_random_exponential(min=1, max=60), stop=stop_after_attempt(6))
