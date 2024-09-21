@@ -4,3 +4,4 @@ docstore.json
 flagged
 .DS_Store
 __pycache__
+mlruns

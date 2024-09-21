@@ -8,8 +8,11 @@ llama-index-llms-openai
 llama-index-llms-gemini
 llama-index-embeddings-gemini
 llama_index.retrievers.bm25
+llama-index-callbacks-arize-phoenix
 bs4
 markdownify 
 transformers 
 gradio
 chromadb
+arize-phoenix
+mlflow

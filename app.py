@@ -1,21 +1,27 @@
-from utils import (
-    from_storages,
-    # get_vector_tool
-    # get_comparision_tool
-    # get_negotiation_tool
-    router_query_engine
-)
 import os
+import subprocess
+import mlflow
 import gradio as gr
+import phoenix as px
+
+import llama_index.core
 
 from llama_index.llms.gemini import Gemini
 from llama_index.embeddings.gemini import GeminiEmbedding
-
 from llama_index.llms.openai import OpenAI
 from llama_index.core import (
     Settings,
 )
 from llama_index.core.agent import ReActAgent
+
+from beautify import beautify
+from utils import (
+    init_index,
+    get_vector_tool,
+    get_summary_tool,
+    get_comparision_tool,
+    get_negotiation_tool,
+)
 
 # For exponential backoff
 from tenacity import (
@@ -24,34 +30,39 @@ from tenacity import (
     wait_random_exponential,
 )
 
+px.launch_app()
+llama_index.core.set_global_handler("arize_phoenix")
+
+mlflow.llama_index.autolog()  # This is for enabling tracing
 
 # Make sure to: export OPENAI_API_KEY=<Your OpenAI key>
-os.environ['OPENAI_API_KEY'] = os.getenv('OPENAI_API_KEY')
+# os.environ['OPENAI_API_KEY'] = os.getenv('OPENAI_API_KEY')
 gemini_api_key = os.getenv('GOOGLE_API_KEY')
 
 Settings.llm = Gemini(api_key=gemini_api_key, model="models/gemini-1.5-flash")
 Settings.embed_model = GeminiEmbedding(
     api_key=gemini_api_key, model="models/embedding-001")
 
-vector_index, summary_index = from_storages()
 
-# vector_tool = get_vector_tool(vector_index=vector_index)
-# comparison_tool = get_comparision_tool(vector_index=vector_index)
-# negotiate_tool = get_negotiation_tool(vector_index=vector_index)
+vector_index, summary_index = init_index()
 
-# llm = OpenAI(model="gpt-4o-mini")
-# agent = ReActAgent.from_tools(
-#     tools=[
-#         vector_tool,
-#         comparison_tool,
-#         negotiate_tool,
-#     ],
-#     verbose=True,
-#     llm=llm,
-#     context='This agent assists users with finding apartments, comparing options, and negotiating offers.'
-# )
+vector_tool = get_vector_tool(vector_index=vector_index)
+summary_tool = get_summary_tool(summary_index=summary_index)
+comparison_tool = get_comparision_tool(vector_index=vector_index)
+negotiate_tool = get_negotiation_tool(vector_index=vector_index)
 
-query_engine = router_query_engine(vector_index, summary_index)
+# llm = OpenAI(model="gpt-3.5-turbo")
+agent = ReActAgent.from_tools(
+    tools=[
+        vector_tool,
+        summary_tool,
+        comparison_tool,
+        negotiate_tool,
+    ],
+    verbose=True,
+    llm=Settings.llm,
+    context='This agent assists users with finding apartments, comparing options, and negotiating offers.'
+)
 
 
 @retry(wait=wait_random_exponential(min=1, max=60), stop=stop_after_attempt(6))
@@ -67,38 +78,9 @@ def query_with_sources(query):
     None: Prints the results directly
     """
     # Query the index
-    # answer = agent.chat(query)
-    answer = query_engine.query(query)
+    answer = agent.chat(query)
 
-    divider = "-" * 50
-
-    references = ''
-    if (len(answer.source_nodes) > 0):
-        for node in answer.source_nodes:
-            # Extract metadata from the node
-            name = node.node.metadata.get('Name', 'Name not found')
-            price = node.node.metadata.get('Price', 'Price not found')
-            location = node.node.metadata.get('Location', 'Location not found')
-            url = node.node.metadata.get('URL', 'URL not found')
-            description = node.node.metadata.get(
-                'Description', 'Description not found')
-            area = node.node.metadata.get('Area', 'Area not found')
-
-            references = references + f"<li>{name}</li>"
-            references = references + f"<li>Giá: {price}</li>"
-            references = references + f"<li>Khu vực: {location}</li>"
-            references = references + f"<li>URL: {url}</li>"
-            references = references + f"<li>Mô tả: {description}</li>"
-            references = references + f"<li>Diện tích: {area}</li>"
-            references = references + divider + "<br>"
-
-        response = f"<pre style='text-wrap: pretty;'><p>{
-            answer}</p><br><b>Tham khảo thêm:</b><br><ul>{references}</ul></pre>"
-    else:
-        response = f"<pre style='text-wrap: pretty;'><p>{
-            answer}</p></pre>"
-
-    return response
+    return beautify(answer)
 
 
 # Create Gradio Interface
@@ -112,3 +94,13 @@ iface = gr.Interface(
 
 # Launch the interface
 iface.launch()
+
+# Start the MLflow UI in a background process
+mlflow_ui_command = ["mlflow", "ui", "--port", "5000"]
+
+subprocess.Popen(
+    mlflow_ui_command,
+    stdout=subprocess.PIPE,
+    stderr=subprocess.PIPE,
+    preexec_fn=os.setsid,
+)

@@ -24,6 +24,7 @@ from llama_index.vector_stores.chroma import ChromaVectorStore
 from llama_index.core.storage.docstore import SimpleDocumentStore
 
 import chromadb
+import mlflow
 
 db_path = "./bds_db"
 docstore_path = "./docstore.json"
@@ -32,7 +33,7 @@ collection_name = "bds_collection"
 db = chromadb.PersistentClient(path=db_path)
 
 
-def from_storages():
+def init_index():
     docstore = SimpleDocumentStore()
     nodes = []
 
@@ -234,8 +235,7 @@ def get_negotiation_tool(vector_index):
     )
     return negotiate_tool
 
-
-def router_query_engine(vector_index, summary_index):
+def get_summary_tool(summary_index):
     summary_engine = summary_index.as_retriever(
         response_mode="tree_summarize",
         use_async=True,
@@ -258,7 +258,14 @@ def router_query_engine(vector_index, summary_index):
             "Useful for summarize context"
         ),
     )
+    
+    return summary_tool
 
+
+def router_query_engine(vector_index, summary_index):    
+    
+    summary_tool = get_summary_tool(summary_index=summary_index)
+    
     vector_engine = vector_index.as_retriever(
         similarity_top_k=2,
     )
