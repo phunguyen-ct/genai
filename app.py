@@ -37,12 +37,10 @@ mlflow.llama_index.autolog()  # This is for enabling tracing
 
 # Make sure to: export OPENAI_API_KEY=<Your OpenAI key>
 # os.environ['OPENAI_API_KEY'] = os.getenv('OPENAI_API_KEY')
-gemini_api_key = os.getenv('GOOGLE_API_KEY')
+os.environ['GOOGLE_API_KEY'] = os.getenv('GOOGLE_API_KEY')
 
-Settings.llm = Gemini(api_key=gemini_api_key, model="models/gemini-1.5-flash")
-Settings.embed_model = GeminiEmbedding(
-    api_key=gemini_api_key, model="models/embedding-001")
-
+Settings.llm = Gemini(model="models/gemini-1.5-flash")
+Settings.embed_model = GeminiEmbedding(model="models/embedding-001")
 
 vector_index, summary_index = init_index()
 
