@@ -11,18 +11,18 @@ def beautify(answer):
             url = node.node.metadata.get('URL', 'URL not found')
             description = node.node.metadata.get(
                 'Description', 'Description not found')
-            area = node.node.metadata.get('Area', 'Area not found')
+            square_footage = node.node.metadata.get('SquareFootage', 'SquareFootage not found')
 
             references = references + f"<li>{name}</li>"
             references = references + f"<li>Giá: {price}</li>"
             references = references + f"<li>Khu vực: {location}</li>"
             references = references + f"<li>URL: {url}</li>"
             references = references + f"<li>Mô tả: {description}</li>"
-            references = references + f"<li>Diện tích: {area}</li>"
+            references = references + f"<li>Diện tích: {square_footage}</li>"
             references = references + divider + "<br>"
 
         response = f"<pre style='text-wrap: pretty;'><p>{
-            answer}</p><br><b>Tham khảo thêm:</b><br><ul>{references}</ul></pre>"
+            answer}</p><br><ul>{references}</ul></pre>"
     else:
         response = f"<pre style='text-wrap: pretty;'><p>{
             answer}</p></pre>"

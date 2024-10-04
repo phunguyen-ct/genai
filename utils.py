@@ -27,13 +27,14 @@ import chromadb
 import mlflow
 
 db_path = "./bds_db"
-docstore_path = "./docstore.json"
-collection_name = "bds_collection"
 # Set up ChromaDB client
 db = chromadb.PersistentClient(path=db_path)
 
 
-def init_index():
+def init_index(name):
+    docstore_path = f"./{name}_docstore.json"
+    collection_name = f"{name}_collection"
+
     docstore = SimpleDocumentStore()
     nodes = []
 
@@ -52,7 +53,7 @@ def init_index():
             collection_name}' does not exist. Creating new collection and processing documents.")
 
         # Run your function to get nodes from documents only if the collection doesn't exist
-        nodes = get_doc_nodes()
+        nodes = get_doc_nodes(name)
         # add note to docstore for BM25
         docstore.add_documents(nodes)
 
@@ -74,24 +75,123 @@ def init_index():
 
     return vector_index, summary_index
 
-# Information Retrieval Agent
+
+def get_vector_engine(vector_index):
+    vector_engine = vector_index.as_retriever(similarity_top_k=2)
+    bm25_retriever = QueryFusionRetriever(
+        [
+            vector_engine,
+            BM25Retriever.from_defaults(
+                docstore=vector_index.docstore, similarity_top_k=2
+            ),
+        ],
+        # query_gen_prompt
+        # num_queries=1,
+    )
+    query_engine = RetrieverQueryEngine(bm25_retriever)
+
+    return query_engine
 
 
-def get_vector_tool(vector_index):
+def get_summary_tool(summary_index, tool_name):
+    summary_engine = summary_index.as_retriever(
+        response_mode="tree_summarize",
+        use_async=True,
+    )
+    bm25_summary_retriever = QueryFusionRetriever(
+        [
+            summary_engine,
+            BM25Retriever.from_defaults(
+                docstore=summary_index.docstore, similarity_top_k=2
+            ),
+        ],
+        # query_gen_prompt
+        # num_queries=1,
+    )
+    tool_name = f"summary_tool_{tool_name.replace('-', '_')}"
+    summary_tool = QueryEngineTool.from_defaults(
+        name=f"summary_tool_{tool_name}",
+        query_engine=RetrieverQueryEngine(bm25_summary_retriever),
+        description=(
+            "Useful for summarize context"
+        ),
+    )
+
+    return summary_tool
+
+
+def router_query_engine(vector_index, summary_index):
+    summary_tool = get_summary_tool(summary_index=summary_index)
+
+    vector_engine = get_vector_engine(vector_index=vector_index)
+    vector_tool = QueryEngineTool.from_defaults(
+        name=f"vector_tool",
+        query_engine=vector_engine,
+    )
+
+    query_engine = RouterQueryEngine(
+        selector=LLMSingleSelector.from_defaults(),
+        query_engine_tools=[
+            vector_tool,
+            summary_tool,
+        ],
+        verbose=True
+    )
+
+    return query_engine
+
+
+def get_vector_tool(vector_index, tool_name):
     def vector_query(
         query: str,
+        # propterty detail
+        name: Optional[str] = None,
         price: Optional[str] = None,
         location: Optional[str] = None,
-        area: Optional[str] = None,
+        square_footage: Optional[str] = None,
+        property_type: Optional[str] = None,
+        bedrooms: Optional[str] = None,
+        bathrooms: Optional[str] = None,
+        amenities: Optional[str] = None,
+        year_build: Optional[str] = None,
+        floor_level: Optional[str] = None,
+        # user preferences
+        user_budget: Optional[str] = None,
+        preferred_location: Optional[str] = None,
+        transportation:  Optional[str] = None,
     ) -> str:
+        name = price or ""
         price = price or "0"
         location = location or ""
-        area = area or "0"
+        square_footage = square_footage or "0"
+        property_type = property_type or ""
+        bedrooms = bedrooms or "0"
+        bathrooms = bathrooms or "0"
+        amenities = amenities or ""
+        year_build = year_build or "0"
+        floor_level = floor_level or "",
+        # user preferences
+        user_budget = user_budget or "0"
+        preferred_location = preferred_location or ""
+        transportation = transportation or ""
+
         metadata_dicts = [
+            {"key": "Name", "value": name},
             {"key": "Price", "value": price},
             {"key": "Location", "value": location},
-            {"key": "Area", "value": area},
+            {"key": "SquareFootage", "value": square_footage},
+            {"key": "PropertyType", "value": property_type},
+            {"key": "Bedrooms", "value": bedrooms},
+            {"key": "Bathrooms", "value": bathrooms},
+            {"key": "Amenities", "value": amenities},
+            {"key": "YearBuild", "value": year_build},
+            {"key": "FloorLevel", "value": floor_level},
+            # user preferences
+            {"key": "UserBudget", "value": user_budget},
+            {"key": "PreferredLocation", "value": preferred_location},
+            {"key": "Transportation", "value": transportation},
         ]
+
         vector_engine = vector_index.as_retriever(
             similarity_top_k=2,
             filters=MetadataFilters.from_dicts(
@@ -107,24 +207,39 @@ def get_vector_tool(vector_index):
                     docstore=vector_index.docstore, similarity_top_k=2
                 ),
             ],
-            num_queries=1,
-            use_async=True,
+            # query_gen_prompt=PromptTemplate("")
+            # num_queries=1,
         )
+
         query_engine = RetrieverQueryEngine(bm25_retriever)
+        response = query_engine.query(query)
 
-        hyde = HyDEQueryTransform(
-            include_original=True
-        )
-        with_hyde = TransformQueryEngine(
-            query_engine, query_transform=hyde)
+        # prompt_template = """\
+        # Please write a passage to answer the question: {query_str}
 
-        response = with_hyde.query(query)
+        # Try to include as many key details as possible.
+
+        # Passage: """
+        # prompt = PromptTemplate(
+        #     input_variables=["question"], template=prompt_template)
+
+        # hyde_query_engine = TransformQueryEngine(
+        #     query_engine,
+        #     query_transform=HyDEQueryTransform(
+        #         hyde_prompt=prompt,
+        #         include_original=True,
+        #     )
+        # )
+
+        # response = hyde_query_engine.query(query)
         return response
 
     # Information Retrieval Agent
+    tool_name = f"vector_tool_{tool_name.replace('-', '_')}"
     vector_tool = FunctionTool.from_defaults(
-        name=f"vector_tool",
+        name=tool_name,
         fn=vector_query,
+        # description=("")
     )
     return vector_tool
 
@@ -133,18 +248,7 @@ def get_comparision_tool(vector_index):
     # load LLM from global setting
     llm = Settings.llm
 
-    vector_engine = vector_index.as_retriever(similarity_top_k=2)
-    bm25_retriever = QueryFusionRetriever(
-        [
-            vector_engine,
-            BM25Retriever.from_defaults(
-                docstore=vector_index.docstore, similarity_top_k=2
-            ),
-        ],
-        num_queries=1,
-        use_async=True,
-    )
-    query_engine = RetrieverQueryEngine(bm25_retriever)
+    query_engine = get_vector_engine(vector_index=vector_index)
 
     # Comparison Agent
     def compare_query(
@@ -176,8 +280,9 @@ def get_comparision_tool(vector_index):
 
     comparison_tool = FunctionTool.from_defaults(
         name=f"comparison",
+        description=(
+            "Compares selected apartments based on user-defined criteria."),
         fn=compare_query,
-        # description="Compares selected apartments based on user-defined criteria."
     )
     return comparison_tool
 
@@ -186,18 +291,7 @@ def get_negotiation_tool(vector_index):
     # load LLM from global setting
     llm = Settings.llm
 
-    vector_engine = vector_index.as_retriever(similarity_top_k=2)
-    bm25_retriever = QueryFusionRetriever(
-        [
-            vector_engine,
-            BM25Retriever.from_defaults(
-                docstore=vector_index.docstore, similarity_top_k=2
-            ),
-        ],
-        num_queries=1,
-        use_async=True,
-    )
-    query_engine = RetrieverQueryEngine(bm25_retriever)
+    query_engine = get_vector_engine(vector_index=vector_index)
     # Negotiation Agent
 
     def negotiate_query(
@@ -230,72 +324,8 @@ def get_negotiation_tool(vector_index):
 
     negotiate_tool = FunctionTool.from_defaults(
         name=f"negotiation_strategy",
+        description=(
+            "Helps negotiate with landlords by suggesting strategies and counteroffers"),
         fn=negotiate_query,
-        # description="Helps negotiate with landlords by suggesting strategies and counteroffers"
     )
     return negotiate_tool
-
-def get_summary_tool(summary_index):
-    summary_engine = summary_index.as_retriever(
-        response_mode="tree_summarize",
-        use_async=True,
-    )
-    with_bm25_summary_retriever = QueryFusionRetriever(
-        [
-            summary_engine,
-            BM25Retriever.from_defaults(
-                docstore=summary_index.docstore, similarity_top_k=2
-            ),
-        ],
-        num_queries=1,
-        use_async=True,
-    )
-
-    summary_tool = QueryEngineTool.from_defaults(
-        name=f"summary_tool",
-        query_engine=RetrieverQueryEngine(with_bm25_summary_retriever),
-        description=(
-            "Useful for summarize context"
-        ),
-    )
-    
-    return summary_tool
-
-
-def router_query_engine(vector_index, summary_index):    
-    
-    summary_tool = get_summary_tool(summary_index=summary_index)
-    
-    vector_engine = vector_index.as_retriever(
-        similarity_top_k=2,
-    )
-
-    with_bm25_vector_retriever = QueryFusionRetriever(
-        [
-            vector_engine,
-            BM25Retriever.from_defaults(
-                docstore=vector_index.docstore, similarity_top_k=2
-            ),
-        ],
-        num_queries=1,
-        use_async=True,
-    )
-
-    vector_tool = QueryEngineTool.from_defaults(
-        name=f"summary_tool",
-        query_engine=RetrieverQueryEngine(with_bm25_vector_retriever),
-        description=(
-            "Useful for summarize context"
-        ),
-    )
-
-    query_engine = RouterQueryEngine(
-        selector=LLMSingleSelector.from_defaults(),
-        query_engine_tools=[
-            vector_tool,
-            summary_tool,
-        ],
-        verbose=True
-    )
-
-    return query_engine

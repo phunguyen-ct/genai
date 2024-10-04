@@ -13,7 +13,7 @@ from web_reader import SimpleWebPageReader
 
 
 # Constants
-BASE_URL = "https://nhadat.cafeland.vn/cho-thue/can-ho-chung-cu-tai-tp-ho-chi-minh"
+BASE_URL = "https://nhadat.cafeland.vn/cho-thue/"
 DEFAULT_TIMEOUT = 50
 USER_AGENT = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36"
 
@@ -22,7 +22,7 @@ HEADERS = {
     "User-Agent": USER_AGENT
 }
 
-LIMIT = 10
+LIMIT = 2
 
 # Crawl the data from website
 
@@ -63,9 +63,14 @@ def crawl_webpage(url: str, headers: dict = HEADERS, timeout: int = DEFAULT_TIME
             if (bds_info_element == None):
                 continue
 
+            images = card.find(
+                'div', class_='images-reales').find('div', class_='img-col1')
+            thumbnail = images.find('a').find('img')['src']
+
             # Extract name
             name = bds_info_element.find(
                 'div', class_='reales-title').find('a')['title']
+
             bds_url = bds_info_element.find(
                 'div', class_='reales-title').find('a')['href']
 
@@ -74,7 +79,7 @@ def crawl_webpage(url: str, headers: dict = HEADERS, timeout: int = DEFAULT_TIME
                 'div', class_='reales-info-general')
             price = price_element.find(
                 'span', class_='reales-price').text.strip()
-            area = price_element.find(
+            square_footage = price_element.find(
                 'span', class_='reales-area').text.strip()
 
             # Extract location & description
@@ -92,7 +97,7 @@ def crawl_webpage(url: str, headers: dict = HEADERS, timeout: int = DEFAULT_TIME
                 'URL': bds_url,
                 'Location': location,
                 'Description': description,
-                'Area': area,
+                'SquareFootage': square_footage,
             })
 
         next_button = None
@@ -148,7 +153,7 @@ def extract_documents(bds_data: List[Dict[str, str]]) -> List[Document]:
                     'URL': bds['URL'],
                     'Location': bds['Location'],
                     'Description': bds['Description'],
-                    'Area': bds['Area'],
+                    'SquareFootage': bds['SquareFootage'],
                 })
                 documents.append(doc)
             else:
@@ -218,21 +223,22 @@ def display_markdown(text: str, max_length: int = 2000) -> None:
         preview += "..."
 
 
-def get_doc_nodes():
+def get_doc_nodes(name):
     # Crawl and convert into Dataframe
-    bds_card_data = crawl_webpage(BASE_URL, headers=HEADERS)
+    url = f"{BASE_URL}{name}"
+    bds_card_data = crawl_webpage(url, headers=HEADERS)
     print(f"Number of extracted: {len(bds_card_data)}")
     print(f"-"*50)
 
     # Example usage
     documents = extract_documents(bds_card_data)
-    print(f"Created {len(documents)} Document objects.")
-    print("-" * 50)
-    print("Metadata of the first document:")
-    print("-" * 50)
-    print(f"Metadata: {documents[0].metadata}")
-    print("-" * 50)
-    print(documents[0].text[:500] + "...")
+    # print(f"Created {len(documents)} Document objects.")
+    # print("-" * 50)
+    # print("Metadata of the first document:")
+    # print("-" * 50)
+    # print(f"Metadata: {documents[0].metadata}")
+    # print("-" * 50)
+    # print(documents[0].text[:500] + "...")
 
     # Parse documents into nodes
     parser = MarkdownNodeParser()
@@ -241,10 +247,10 @@ def get_doc_nodes():
     print(f"Number of nodes created: {len(nodes)}")
 
     # Display metadata and content of a specific node (e.g., the 8th node)
-    print("\nMetadata of the 8th node:")
-    print(nodes[7].metadata)
+    # print("\nMetadata of the 8th node:")
+    # print(nodes[7].metadata)
 
-    print("\nContent preview of the 8th node:")
-    display_markdown(nodes[7].text)
+    # print("\nContent preview of the 8th node:")
+    # display_markdown(nodes[7].text)
 
     return nodes
