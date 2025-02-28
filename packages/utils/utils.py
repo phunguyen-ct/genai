@@ -1,4 +1,4 @@
-from web_crawler import get_doc_nodes
+from packages.WebCrawler.web_crawler import get_doc_nodes
 
 from typing import List, Dict, Optional
 
@@ -24,7 +24,7 @@ from llama_index.vector_stores.chroma import ChromaVectorStore
 from llama_index.core.storage.docstore import SimpleDocumentStore
 
 import chromadb
-import mlflow
+# import mlflow
 
 db_path = "./bds_db"
 # Set up ChromaDB client
@@ -32,7 +32,7 @@ db = chromadb.PersistentClient(path=db_path)
 
 
 def init_index(name):
-    docstore_path = f"./{name}_docstore.json"
+    docstore_path = f"./bds_docs/{name}_docstore.json"
     collection_name = f"{name}_collection"
 
     docstore = SimpleDocumentStore()
@@ -77,7 +77,9 @@ def init_index(name):
 
 
 def get_vector_engine(vector_index):
-    vector_engine = vector_index.as_retriever(similarity_top_k=2)
+    vector_engine = vector_index.as_retriever(
+        similarity_top_k=2,
+    )
     bm25_retriever = QueryFusionRetriever(
         [
             vector_engine,
@@ -85,7 +87,6 @@ def get_vector_engine(vector_index):
                 docstore=vector_index.docstore, similarity_top_k=2
             ),
         ],
-        # query_gen_prompt
         # num_queries=1,
     )
     query_engine = RetrieverQueryEngine(bm25_retriever)
@@ -149,47 +150,26 @@ def get_vector_tool(vector_index, tool_name):
         price: Optional[str] = None,
         location: Optional[str] = None,
         square_footage: Optional[str] = None,
-        property_type: Optional[str] = None,
         bedrooms: Optional[str] = None,
         bathrooms: Optional[str] = None,
         amenities: Optional[str] = None,
-        year_build: Optional[str] = None,
-        floor_level: Optional[str] = None,
-        # user preferences
-        user_budget: Optional[str] = None,
-        preferred_location: Optional[str] = None,
-        transportation:  Optional[str] = None,
     ) -> str:
         name = price or ""
         price = price or "0"
         location = location or ""
         square_footage = square_footage or "0"
-        property_type = property_type or ""
         bedrooms = bedrooms or "0"
         bathrooms = bathrooms or "0"
         amenities = amenities or ""
-        year_build = year_build or "0"
-        floor_level = floor_level or "",
-        # user preferences
-        user_budget = user_budget or "0"
-        preferred_location = preferred_location or ""
-        transportation = transportation or ""
 
         metadata_dicts = [
             {"key": "Name", "value": name},
             {"key": "Price", "value": price},
             {"key": "Location", "value": location},
             {"key": "SquareFootage", "value": square_footage},
-            {"key": "PropertyType", "value": property_type},
             {"key": "Bedrooms", "value": bedrooms},
             {"key": "Bathrooms", "value": bathrooms},
             {"key": "Amenities", "value": amenities},
-            {"key": "YearBuild", "value": year_build},
-            {"key": "FloorLevel", "value": floor_level},
-            # user preferences
-            {"key": "UserBudget", "value": user_budget},
-            {"key": "PreferredLocation", "value": preferred_location},
-            {"key": "Transportation", "value": transportation},
         ]
 
         vector_engine = vector_index.as_retriever(
@@ -244,7 +224,7 @@ def get_vector_tool(vector_index, tool_name):
     return vector_tool
 
 
-def get_comparision_tool(vector_index):
+def get_comparision_tool(vector_index, tool_name):
     # load LLM from global setting
     llm = Settings.llm
 
@@ -278,8 +258,9 @@ def get_comparision_tool(vector_index):
 
         return comparison
 
+    tool_name = f"comparison_{tool_name.replace('-', '_')}"
     comparison_tool = FunctionTool.from_defaults(
-        name=f"comparison",
+        name=tool_name,
         description=(
             "Compares selected apartments based on user-defined criteria."),
         fn=compare_query,
@@ -287,7 +268,7 @@ def get_comparision_tool(vector_index):
     return comparison_tool
 
 
-def get_negotiation_tool(vector_index):
+def get_negotiation_tool(vector_index, tool_name):
     # load LLM from global setting
     llm = Settings.llm
 
@@ -322,8 +303,9 @@ def get_negotiation_tool(vector_index):
 
         return negotiation_response, counteroffer_response
 
+    tool_name = f"negotiation_strategy_{tool_name.replace('-', '_')}"
     negotiate_tool = FunctionTool.from_defaults(
-        name=f"negotiation_strategy",
+        name=tool_name,
         description=(
             "Helps negotiate with landlords by suggesting strategies and counteroffers"),
         fn=negotiate_query,

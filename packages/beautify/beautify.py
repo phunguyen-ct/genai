@@ -8,7 +8,7 @@ def beautify(answer):
             price = node.node.metadata.get('Price', 'Price not found')
             location = node.node.metadata.get(
                 'Location', 'Location not found')
-            url = node.node.metadata.get('URL', 'URL not found')
+            # url = node.node.metadata.get('URL', 'URL not found')
             description = node.node.metadata.get(
                 'Description', 'Description not found')
             square_footage = node.node.metadata.get('SquareFootage', 'SquareFootage not found')
@@ -16,7 +16,7 @@ def beautify(answer):
             references = references + f"<li>{name}</li>"
             references = references + f"<li>Giá: {price}</li>"
             references = references + f"<li>Khu vực: {location}</li>"
-            references = references + f"<li>URL: {url}</li>"
+            # references = references + f"<li>URL: {url}</li>"
             references = references + f"<li>Mô tả: {description}</li>"
             references = references + f"<li>Diện tích: {square_footage}</li>"
             references = references + divider + "<br>"

@@ -9,7 +9,7 @@ from llama_index.core import (
     Document,
 )
 
-from web_reader import SimpleWebPageReader
+from packages.WebReader.web_reader import SimpleWebPageReader
 
 
 # Constants
